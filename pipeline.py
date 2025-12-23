@@ -1,7 +1,12 @@
+import re
 import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+from collections import Counter
+from sentence_transformers import SentenceTransformer
+import umap
+import hdbscan
 
 MIN_DURATION = 0 * 60 
 MAX_DURATION = 30 * 60
@@ -114,7 +119,7 @@ def create_bar_plot_screen(
         if col in df.columns
     ]
 
-    _, axes = plt.subplots(nrows=2, ncols=((len(questions) + 1) // 2))
+    _, axes = plt.subplots(nrows=2, ncols=((len(questions) + 1) // 2), figsize=(20, 8))
     axes = axes.flatten()
 
     for ax, (col, label) in zip(axes, questions):
@@ -132,7 +137,61 @@ def create_bar_plot_screen(
 
     plt.suptitle(title)
     plt.tight_layout()
-    plt.show()
+    plt.savefig(f"plots/{title.replace(' ', '_').lower()}.png")
+    print(f"Saved plot for {title}")
+    # plt.show()
+
+def process_open_questions(df: pd.DataFrame, column: str) -> pd.Series:
+    print(df[column])
+    df[f"{column}_clean"] = df[column].fillna("Empty").apply(preprocess_open_text)
+    print(df[f"{column}_clean"])
+    categorize_open_ended_responses(df, f"{column}_clean")
+    print(df[f"{column}_clean_label"])
+
+def preprocess_open_text(text: str):
+    text = text.strip()  # Remove leading/trailing whitespace
+    text = text.lower() # Lowercase
+
+    # import emoji
+    # from bs4 import BeautifulSoup
+    # text = BeautifulSoup(text, "html.parser").get_text() # Remove HTML tags 
+    # text = emoji.replace_emoji(text, replace="") # Remove emojis
+    
+    words = re.findall(r'\b\w+\b', text) # Tokenization using regex
+    words = [w for w in words if len(w) > 3]  # Remove short words
+    
+    return " ".join(words)
+
+
+def categorize_open_ended_responses(df: pd.DataFrame, column: str):
+    # 1. Embed responses
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    embeddings = model.encode(df[column].dropna().tolist())
+
+    # 2. Dimensionality reduction
+    umap_embeddings = umap.UMAP(n_neighbors=2, min_dist=0.0, metric='cosine').fit_transform(embeddings)
+
+    # 3. Cluster
+    clusterer = hdbscan.HDBSCAN(min_cluster_size=2, metric='euclidean')
+    clusters = clusterer.fit_predict(umap_embeddings)
+
+    # 4. Assign cluster labels to df
+    df.loc[df[column].notna(), f"{column}_cluster"] = clusters
+
+    # 5. Create human-readable labels for clusters
+    cluster_labels = {}
+    for cluster_id in df[f"{column}_cluster"].dropna().unique():
+        texts = df.loc[df[f"{column}_cluster"] == cluster_id, f"{column}"]
+        
+        all_words = []
+        for text in texts:
+            all_words.extend(text.split())
+        
+        word_counts = Counter(all_words)
+        most_common = [w for w, _ in word_counts.most_common(2)]
+        cluster_labels[cluster_id] = ", ".join(most_common)
+
+    df[f"{column}_label"] = df[f"{column}_cluster"].map(cluster_labels).fillna("Empty")
 
 
 filename = "export_friends_3.csv"
@@ -166,26 +225,36 @@ create_bar_plot_screen(
     title="Demographic Information",
 )
 
-GENERAL_AI_QUESTIONS = {
+GENERAL_AI_OPEN_QUESTIONS = {
+    "q14": "Mistake explanation",
+}
+
+GENERAL_AI_MC_QUESTIONS = {
     "q10": "Harmfulness of AI",
     "q11": "Can AI become conscious",
     "q12": "What type of consciousness",
     "q13": "Does AI make mistakes",
-    #"q14": "Mistake explanation",
     "q15": "Importance of AI detection",
     "q16": "Can you detect AI-generated content",
     "q17_1": "Familiarity with generative AI",
     "q18_1": "Familiarity with ChatGPT",
-    "q18_2": "Familiarity with DALL·E",
+    "q18_2": "Familiarity with DALLE",
     "q18_3": "Familiarity with Sora",
 }
 
 create_bar_plot_screen(
     df_clean,
-    GENERAL_AI_QUESTIONS,
-    title="General AI Knowledge and Opinions",
+    GENERAL_AI_MC_QUESTIONS,
+    title="Opinions about General AI",
     bin_numeric_list=("q18",)
 )
+
+CHATGPT_OPEN_QUESTIONS = {
+    "q22": "What is ChatGPT",
+    "q23": "How does ChatGPT work",
+    "q24": "Strengths of ChatGPT",
+    "q25": "Weaknesses of ChatGPT",
+}
 
 CHATGPT_MC_QUESTIONS = {
     "q21": "How often use ChatGPT",
@@ -199,20 +268,15 @@ CHATGPT_MC_QUESTIONS = {
     "q26_8": "Could produce harmful information",
     "q27_1": "Double check ChatGPT info",
 }
-
 create_bar_plot_screen(
     df_clean,
     CHATGPT_MC_QUESTIONS,
     title="Opinions about ChatGPT",
 )
 
-CHATGPT_OPEN_QUESTIONS = {
-    "q22": "What is ChatGPT",
-    "q23": "How does ChatGPT work",
-    "q24": "Strengths of ChatGPT",
-    "q25": "Weaknesses of ChatGPT",
+DALLE_OPEN_QUESTIONS = {
+    "q31": "How does DALLE work",
 }
-# TO DO
 
 DALLE_MC_QUESTIONS = {
     "q32_1": "Reuses information",
@@ -223,17 +287,11 @@ DALLE_MC_QUESTIONS = {
     "q32_6": "Stores copies of generated images",
     "q32_7": "Creates culturally biased images",
 }
-
 create_bar_plot_screen(
     df_clean,
     DALLE_MC_QUESTIONS,
     title="Opinions about DALLE",
 )
-
-DALLE_OPEN_QUESTIONS = {
-    "q31": "How does DALLE work",
-}
-# TO DO
 
 SORA_MC_QUESTIONS = {
     "q41_1": "Creates videos close to reality",
@@ -242,14 +300,17 @@ SORA_MC_QUESTIONS = {
     "q41_4": "Uses content without permission",
     "q41_5": "Will make it harder to trust videos",
 }
-
 create_bar_plot_screen(
     df_clean,
     SORA_MC_QUESTIONS,
     title="Opinions about Sora",
 )
 
-FEEDBACK_QUESTIONS = {
+FEEDBACK_OPEN_QUESTIONS = {
+    "q55": "Any suggestions for improvement",
+}
+
+FEEDBACK_MC_QUESTIONS = {
     "q51": "Any confusing questions",
     "q52_1": "Most understandable question",
     "q52_4": "Least understandable question",
@@ -257,12 +318,23 @@ FEEDBACK_QUESTIONS = {
     "q54_1": "How intuitive was the survey",
     "q54_2": "How easy was the navigation",
     "q54_3": "How interesting were the questions",
-    #"q55": "Any suggestions for improvement",
 }
+create_bar_plot_screen(
+    df_clean,
+    FEEDBACK_MC_QUESTIONS,
+    title="Survey Feedback",
+    bin_numeric_list=("q54",),
+)
+
+OPEN_QUESTIONS = GENERAL_AI_OPEN_QUESTIONS | CHATGPT_OPEN_QUESTIONS | DALLE_OPEN_QUESTIONS | FEEDBACK_OPEN_QUESTIONS
+
+for col, label in OPEN_QUESTIONS.items():
+    process_open_questions(df_clean, col)
+
+OPEN_QUESTIONS_LABELED = {f"{col}_clean_label": label for col, label in OPEN_QUESTIONS.items()}
 
 create_bar_plot_screen(
     df_clean,
-    FEEDBACK_QUESTIONS,
-    title="Survey Feedback",
-    bin_numeric_list=("q54",),
+    OPEN_QUESTIONS_LABELED,
+    title=f"Categorized responses for open questions",
 )
