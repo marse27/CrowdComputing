@@ -1,8 +1,11 @@
 import re
+import numpy as np
 import pandas as pd
+from scipy.stats import chi2_contingency
 from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+import seaborn as sns
 from collections import Counter
 from sentence_transformers import SentenceTransformer
 import umap
@@ -142,11 +145,18 @@ def create_bar_plot_screen(
     # plt.show()
 
 def process_open_questions(df: pd.DataFrame, column: str) -> pd.Series:
-    print(df[column])
     df[f"{column}_clean"] = df[column].fillna("Empty").apply(preprocess_open_text)
-    print(df[f"{column}_clean"])
+
     categorize_open_ended_responses(df, f"{column}_clean")
-    print(df[f"{column}_clean_label"])
+
+    print(f"Sample categorizations for {column}:")
+    max_width = 30  
+    for o, c, l in zip(
+        df[column], 
+        df[f"{column}_clean"], 
+        df[f"{column}_clean_label"]
+    ): print(f"{str(o)[:max_width]:<{max_width}} → {str(c)[:max_width]:<{max_width}} → {str(l)[:max_width]:<{max_width}}"
+    )
 
 def preprocess_open_text(text: str):
     text = text.strip()  # Remove leading/trailing whitespace
@@ -194,7 +204,7 @@ def categorize_open_ended_responses(df: pd.DataFrame, column: str):
     df[f"{column}_label"] = df[f"{column}_cluster"].map(cluster_labels).fillna("Empty")
 
 
-filename = "export_friends_3.csv"
+filename = "export_friends_4.csv"
 force_data_cleaning = False
 output_path = Path(f"cleaned_data/{filename}")
 if output_path.exists() and not force_data_cleaning:
@@ -218,7 +228,6 @@ DEMOGRAPHIC_QUESTIONS = {
 }
 mask = (df_clean["q7"] == "Other:") & (df_clean["q7_8_text"].notna())
 df_clean.loc[mask, "q7"] = df_clean.loc[mask, "q7_8_text"]
-
 create_bar_plot_screen(
     df_clean,
     DEMOGRAPHIC_QUESTIONS,
@@ -241,7 +250,6 @@ GENERAL_AI_MC_QUESTIONS = {
     "q18_2": "Familiarity with DALLE",
     "q18_3": "Familiarity with Sora",
 }
-
 create_bar_plot_screen(
     df_clean,
     GENERAL_AI_MC_QUESTIONS,
@@ -338,3 +346,99 @@ create_bar_plot_screen(
     OPEN_QUESTIONS_LABELED,
     title=f"Categorized responses for open questions",
 )
+
+
+def cramers_v(chi2, contingency_table):
+    n = contingency_table.values.sum()
+    r, k = contingency_table.shape
+    return np.sqrt(chi2 / (n * (min(r, k) - 1)))
+
+
+def chi_square_all_pairings(
+    df: pd.DataFrame,
+    demographic_vars: list,
+    question_vars: list,
+    min_cell_count: int = 0,
+    min_group_size: int = 0
+) -> pd.DataFrame:
+    """
+    Runs Chi-square tests + Cramér's V for all demographic x question pairings.
+    
+    Parameters:
+        df: cleaned DataFrame
+        demographic_vars: list of demographic column names
+        question_vars: list of question column names
+        min_cell_count: minimum expected count per cell (for validity)
+        min_group_size: minimum category size to keep
+        
+    Returns:
+        DataFrame with test results
+    """
+    results = []
+
+    for demo in demographic_vars:
+        # Drop rare demographic categories
+        demo_counts = df[demo].value_counts()
+        valid_demo_values = demo_counts[demo_counts >= min_group_size].index
+        df_demo = df[df[demo].isin(valid_demo_values)]
+
+        for question in question_vars:
+            # Build contingency table
+            contingency = pd.crosstab(df_demo[demo], df_demo[question])
+
+            # Skip degenerate tables
+            if contingency.shape[0] < 2 or contingency.shape[1] < 2:
+                continue
+
+            # Chi-square test
+            chi2, p, dof, expected = chi2_contingency(contingency)
+
+            # Skip if expected counts too small
+            if (expected < min_cell_count).any():
+                continue
+
+            v = cramers_v(chi2, contingency)
+
+            results.append({
+                "demographic": demo,
+                "question": question,
+                "chi2": chi2,
+                "dof": dof,
+                "p_value": p,
+                "cramers_v": v,
+                "n": contingency.values.sum()
+            })
+
+    return pd.DataFrame(results)
+
+def create_heatmap_of_associations(df: pd.DataFrame):
+    heatmap_df = results_df.pivot(
+        index="demographic",
+        columns="question",
+        values="p_value"
+    )
+
+    plt.figure(figsize=(20, 8))
+    sns.heatmap(
+        heatmap_df,
+        annot=True,
+        fmt=".2f",
+        cmap="viridis"
+    )
+    title = "Associations between Demographics and AI Beliefs"
+    plt.title(title)
+    plt.tight_layout()
+    plt.savefig(f"plots/{title.replace(' ', '_').lower()}.png")
+    print(f"Saved plot for {title}")
+    # plt.show()
+
+DEMOGRAPHIC_COLS = list(DEMOGRAPHIC_QUESTIONS.keys())
+
+ALL_COLS = list((GENERAL_AI_MC_QUESTIONS | CHATGPT_MC_QUESTIONS | DALLE_MC_QUESTIONS | SORA_MC_QUESTIONS | OPEN_QUESTIONS_LABELED).keys())
+results_df = chi_square_all_pairings(
+    df_clean,
+    demographic_vars=DEMOGRAPHIC_COLS,
+    question_vars=ALL_COLS
+)
+print(results_df.sort_values("p_value").head(10))
+create_heatmap_of_associations(results_df)
