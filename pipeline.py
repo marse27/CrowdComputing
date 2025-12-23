@@ -1,5 +1,7 @@
 import pandas as pd
 from pathlib import Path
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 # Load the raw survey data
 filename = "export_friends_2.csv"
@@ -64,57 +66,123 @@ else:
 	print(f"Cleaned responses: {len(df_clean)}")
 	df_clean.to_csv(output_path, index=False)
 
-def clean_demographic_text(series: pd.Series) -> pd.Series:
+def clean_multiple_choice_text(series: pd.Series) -> pd.Series:
     return (
         series
         .astype(str)
         .str.strip()
         .str.replace(r"\s+", " ", regex=True)
+        .str.slice(0, 10)
         .replace({"nan": None})
     )
 
-import matplotlib.pyplot as plt
-
-def plot_demographic_distribution(
+def plot_multiple_choice_distribution(
     df: pd.DataFrame,
     column: str,
     title: str,
-    min_count: int = 0
+    ax,
+    min_count: int = 0,
+    bin_numeric: bool = False
 ):
     """
     Create a bar plot showing the distribution of a text-based demographic variable.
     """
-    data = clean_demographic_text(df[column]).dropna()
+    data = df[column].dropna()
+
+    # If numeric and should be binned (e.g., q18)
+    if bin_numeric:
+        data = pd.to_numeric(data, errors="coerce").dropna()
+        data = bin_1_to_100(data)
+    else:
+        data = clean_multiple_choice_text(data)
 
     counts = data.value_counts()
     counts = counts[counts >= min_count]
 
-    plt.figure()
-    counts.plot(kind="bar")
-    plt.title(title)
-    plt.xlabel("")
-    plt.ylabel("Number of participants")
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
-    plt.show()
+    counts.plot(kind="bar", ax=ax)
+    ax.set_title(title)
+    ax.set_xlabel("")
+    ax.set_ylabel("Participants")
+    ax.tick_params(axis="x", rotation=45)
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
-DEMOGRAPHIC_LABELS = {
+def bin_1_to_100(series: pd.Series):
+    bins = list(range(0, 101, 10))
+    labels = [f"{i+1}-{i+10}" for i in range(0, 100, 10)]
+    return pd.cut(series, bins=bins, labels=labels, include_lowest=True)
+
+DEMOGRAPHIC_QUESTIONS = {
     "q2": "Age",
     "q3_1": "Country of Residence",
     "q4_1": "Country of Birth",
     "q5_1": "Native Language",
     "q6": "Highest Education Level",
     "q7": "Field of Study / Work",
-    # "q7_8_text": "Specific Field of Study / Work",
     "q8": "Employment Status",
     "q9": "Financial Situation",
 }
+mask = (df_clean["q7"] == "Other:") & (df_clean["q7_8_text"].notna())
+df_clean.loc[mask, "q7"] = df_clean.loc[mask, "q7_8_text"]
 
-for col, label in DEMOGRAPHIC_LABELS.items():
-    if col in df_clean.columns:
-        plot_demographic_distribution(
-            df_clean,
-            column=col,
-            title=f"Distribution of {label}",
-            min_count=1   # suppress singletons if desired
-        )
+questions = [
+    (col, label) for col, label in DEMOGRAPHIC_QUESTIONS.items()
+    if col in df_clean.columns
+]
+
+fig, axes = plt.subplots(nrows=2, ncols=4)
+axes = axes.flatten()  # makes indexing easier
+
+for ax, (col, label) in zip(axes, questions):
+    plot_multiple_choice_distribution(
+        df_clean,
+        column=col,
+        title=label,
+        ax=ax,
+        min_count=1,
+    )
+
+# Hide unused subplots (if fewer than 8 questions)
+for ax in axes[len(questions):]:
+    ax.axis("off")
+
+plt.tight_layout()
+plt.show()
+
+GENERAL_AI_QUESTIONS = {
+    "q10": "Harmfulness of AI",
+    "q11": "Can AI become conscious",
+    "q12": "What type of consciousness",
+    "q13": "Does AI make mistakes",
+    #"q14": "Mistake explanation",
+    "q15": "Importance of AI detection",
+    "q16": "Can you detect AI-generated content",
+    "q17_1": "Familiarity with generative AI",
+    "q18_1": "Familiarity with ChatGPT",
+    "q18_2": "Familiarity with DALL·E",
+    "q18_3": "Familiarity with Sora",
+}
+
+questions = [
+    (col, label) for col, label in GENERAL_AI_QUESTIONS.items()
+    if col in df_clean.columns
+]
+
+fig, axes = plt.subplots(nrows=2, ncols=5)
+axes = axes.flatten()  # makes indexing easier
+
+for ax, (col, label) in zip(axes, questions):
+    plot_multiple_choice_distribution(
+        df_clean,
+        column=col,
+        title=label,
+        ax=ax,
+        min_count=1,
+        bin_numeric=col.startswith("q18")
+    )
+
+# Hide unused subplots (if fewer than 8 questions)
+for ax in axes[len(questions):]:
+    ax.axis("off")
+
+plt.tight_layout()
+plt.show()
