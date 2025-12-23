@@ -63,13 +63,13 @@ def clean_multiple_choice_text(series: pd.Series) -> pd.Series:
         .astype(str)
         .str.strip()
         .str.replace(r"\s+", " ", regex=True)
-        .str.slice(0, 20)
+        .str.slice(0, 15)
         .replace({"nan": None})
     )
 
 def bin_1_to_100(series: pd.Series):
-    bins = list(range(0, 101, 10))
-    labels = [f"{i+1}-{i+10}" for i in range(0, 100, 10)]
+    bins = list(range(0, 101, 20))
+    labels = [f"{i+1}-{i+20}" for i in range(0, 100, 20)]
     return pd.cut(
         series, 
         bins=bins, 
@@ -103,20 +103,18 @@ def plot_multiple_choice_distribution(
     ax.tick_params(axis="x")
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
-def plot_multiple_choice_screen(
+def create_bar_plot_screen(
     df: pd.DataFrame,
     columns: list,
     title: str,
     bin_numeric_list: tuple = (),
-    rows: int = 2,
-    cols: int = 4
 ):
     questions = [
         (col, label) for col, label in columns.items()
         if col in df.columns
     ]
 
-    _, axes = plt.subplots(nrows=rows, ncols=cols)
+    _, axes = plt.subplots(nrows=2, ncols=((len(questions) + 1) // 2))
     axes = axes.flatten()
 
     for ax, (col, label) in zip(axes, questions):
@@ -162,12 +160,10 @@ DEMOGRAPHIC_QUESTIONS = {
 mask = (df_clean["q7"] == "Other:") & (df_clean["q7_8_text"].notna())
 df_clean.loc[mask, "q7"] = df_clean.loc[mask, "q7_8_text"]
 
-plot_multiple_choice_screen(
+create_bar_plot_screen(
     df_clean,
     DEMOGRAPHIC_QUESTIONS,
     title="Demographic Information",
-    rows=2,
-    cols=4
 )
 
 GENERAL_AI_QUESTIONS = {
@@ -184,11 +180,89 @@ GENERAL_AI_QUESTIONS = {
     "q18_3": "Familiarity with Sora",
 }
 
-plot_multiple_choice_screen(
+create_bar_plot_screen(
     df_clean,
     GENERAL_AI_QUESTIONS,
     title="General AI Knowledge and Opinions",
-    bin_numeric_list=("q18",),
-    rows=2,
-    cols=5
+    bin_numeric_list=("q18",)
+)
+
+CHATGPT_MC_QUESTIONS = {
+    "q21": "How often use ChatGPT",
+    "q26_1": "Reuses information",
+    "q26_2": "Can combine in new ways",
+    "q26_3": "Can access information from the web",
+    "q26_4": "Stores personal data",
+    "q26_5": "Changes based on user",
+    "q26_6": "Just follows rules",
+    "q26_7": "Is influenced by the culture of the user",
+    "q26_8": "Could produce harmful information",
+    "q27_1": "Double check ChatGPT info",
+}
+
+create_bar_plot_screen(
+    df_clean,
+    CHATGPT_MC_QUESTIONS,
+    title="Opinions about ChatGPT",
+)
+
+CHATGPT_OPEN_QUESTIONS = {
+    "q22": "What is ChatGPT",
+    "q23": "How does ChatGPT work",
+    "q24": "Strengths of ChatGPT",
+    "q25": "Weaknesses of ChatGPT",
+}
+# TO DO
+
+DALLE_MC_QUESTIONS = {
+    "q32_1": "Reuses information",
+    "q32_2": "Can combine in new ways",
+    "q32_3": "Can recreate artists' styles",
+    "q32_4": "Uses content without permission",
+    "q32_5": "Is a tool and not an creator",
+    "q32_6": "Stores copies of generated images",
+    "q32_7": "Creates culturally biased images",
+}
+
+create_bar_plot_screen(
+    df_clean,
+    DALLE_MC_QUESTIONS,
+    title="Opinions about DALLE",
+)
+
+DALLE_OPEN_QUESTIONS = {
+    "q31": "How does DALLE work",
+}
+# TO DO
+
+SORA_MC_QUESTIONS = {
+    "q41_1": "Creates videos close to reality",
+    "q41_2": "Mainly reuses content",
+    "q41_3": "Makes faking videos easy",
+    "q41_4": "Uses content without permission",
+    "q41_5": "Will make it harder to trust videos",
+}
+
+create_bar_plot_screen(
+    df_clean,
+    SORA_MC_QUESTIONS,
+    title="Opinions about Sora",
+)
+
+FEEDBACK_QUESTIONS = {
+    "q51": "Any confusing questions",
+    "q52_1": "Most understandable question",
+    "q52_4": "Least understandable question",
+    "q53": "How long did the survey feel",
+    "q54_1": "How intuitive was the survey",
+    "q54_2": "How easy was the navigation",
+    "q54_3": "How interesting were the questions",
+    #"q55": "Any suggestions for improvement",
+}
+
+create_bar_plot_screen(
+    df_clean,
+    FEEDBACK_QUESTIONS,
+    title="Survey Feedback",
+    bin_numeric_list=("q54",),
 )
