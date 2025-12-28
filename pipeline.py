@@ -204,7 +204,7 @@ def categorize_open_ended_responses(df: pd.DataFrame, column: str):
     df[f"{column}_label"] = df[f"{column}_cluster"].map(cluster_labels).fillna("Empty")
 
 
-filename = "export_friends_4.csv"
+filename = "export_friends_5.csv"
 force_data_cleaning = False
 output_path = Path(f"cleaned_data/{filename}")
 if output_path.exists() and not force_data_cleaning:
