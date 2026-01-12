@@ -10,6 +10,9 @@ from collections import Counter
 from sentence_transformers import SentenceTransformer
 import umap
 import hdbscan
+from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+import torch
+import math
 
 MIN_DURATION = 0 * 60 
 MAX_DURATION = 30 * 60
@@ -53,7 +56,7 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
         df_clean.drop_duplicates(subset=PROLIFIC_ID_COL)
         deduplicated_responses = len(df_clean)
         print(f"Duplicate responses removed: {remaining_responses - deduplicated_responses}")
-        remaining_responses = attention_checked_responses
+        remaining_responses = deduplicated_responses
     
     duration = df_clean[DURATION_COL].astype(int)
     df_clean = df_clean[
@@ -144,19 +147,38 @@ def create_bar_plot_screen(
     print(f"Saved plot for {title}")
     # plt.show()
 
-def process_open_questions(df: pd.DataFrame, column: str) -> pd.Series:
+def process_open_questions(df: pd.DataFrame, column: str) -> pd.Series:  
+
+    # === AI-likeness features ===
+    df[f"{column}_ppl"] = df[column].fillna("").apply(compute_perplexity)
+    df[f"{column}_lexdiv"] = df[column].fillna("").apply(lexical_diversity)
+    df[f"{column}_repeat"] = df[column].fillna("").apply(repetition_ratio)
+    df[f"{column}_length"] = df[column].fillna("").str.split().apply(len)
+
+    df[f"{column}_ai_score"] = (
+        -df[f"{column}_ppl"].rank(pct=True) +     # lower ppl = more AI-like
+        -df[f"{column}_lexdiv"].rank(pct=True) +  # lower diversity = more AI-like
+        df[f"{column}_repeat"].rank(pct=True)
+    ) / 3
+
+    # df["ai_flag"] = df[f"{column}_ai_score"] > df[f"{column}_ai_score"].quantile(0.95)
     df[f"{column}_clean"] = df[column].fillna("Empty").apply(preprocess_open_text)
+
 
     categorize_open_ended_responses(df, f"{column}_clean")
 
     print(f"Sample categorizations for {column}:")
     max_width = 30  
-    for o, c, l in zip(
+    for o, c, l, s in zip(
         df[column], 
         df[f"{column}_clean"], 
-        df[f"{column}_clean_label"]
-    ): print(f"{str(o)[:max_width]:<{max_width}} → {str(c)[:max_width]:<{max_width}} → {str(l)[:max_width]:<{max_width}}"
-    )
+        df[f"{column}_clean_label"],
+        df[f"{column}_ai_score"]
+    ): print(
+            f"{str(o)[:max_width]:<{max_width}} → "
+            f"{str(c)[:max_width]:<{max_width}} → "
+            f"{str(l)[:max_width]:<{max_width}} | AI-score: {s:.2f}"
+        )
 
 def preprocess_open_text(text: str):
     text = text.strip()  # Remove leading/trailing whitespace
@@ -203,8 +225,34 @@ def categorize_open_ended_responses(df: pd.DataFrame, column: str):
 
     df[f"{column}_label"] = df[f"{column}_cluster"].map(cluster_labels).fillna("Empty")
 
+tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+model = GPT2LMHeadModel.from_pretrained("gpt2")
+model.eval()
 
-filename = "export_friends_5.csv"
+def compute_perplexity(text: str) -> float:
+    if not text or len(text.split()) < 5:
+        return float("nan")
+
+    enc = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+    with torch.no_grad():
+        loss = model(**enc, labels=enc["input_ids"]).loss
+    return math.exp(loss.item())
+
+def lexical_diversity(text: str) -> float:
+    tokens = text.split()
+    if len(tokens) == 0:
+        return float("nan")
+    return len(set(tokens)) / len(tokens)
+
+def repetition_ratio(text: str) -> float:
+    tokens = text.split()
+    if len(tokens) == 0:
+        return float("nan")
+    counts = Counter(tokens)
+    return max(counts.values()) / len(tokens)
+
+
+filename = "export_friends_final.csv"
 force_data_cleaning = False
 output_path = Path(f"cleaned_data/{filename}")
 if output_path.exists() and not force_data_cleaning:
