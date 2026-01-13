@@ -143,7 +143,7 @@ def create_bar_plot_screen(
 
     plt.suptitle(title)
     plt.tight_layout()
-    plt.savefig(f"plots/{title.replace(' ', '_').lower()}.png")
+    plt.savefig(f"plots/friends/{title.replace(' ', '_').lower()}.png")
     print(f"Saved plot for {title}")
     # plt.show()
 
@@ -168,7 +168,7 @@ def process_open_questions(df: pd.DataFrame, column: str) -> pd.Series:
     categorize_open_ended_responses(df, f"{column}_clean")
 
     print(f"Sample categorizations for {column}:")
-    max_width = 30  
+    max_width = 50  
     for o, c, l, s in zip(
         df[column], 
         df[f"{column}_clean"], 
@@ -395,6 +395,19 @@ create_bar_plot_screen(
     title=f"Categorized responses for open questions",
 )
 
+AI_SCORE_COLS = [
+    col for col in df_clean.columns
+    if col.endswith("_ai_score")
+]
+df_clean["ai_score_mean"] = (
+    df_clean[AI_SCORE_COLS]
+    .mean(axis=1)
+    .round(3)
+)
+df_clean["ai_score_mean_z"] = (
+    df_clean["ai_score_mean"] - df_clean["ai_score_mean"].mean()
+) / df_clean["ai_score_mean"].std()
+print(df_clean[["ai_score_mean", "ai_score_mean_z"]])
 
 def cramers_v(chi2, contingency_table):
     n = contingency_table.values.sum()
@@ -476,7 +489,7 @@ def create_heatmap_of_associations(df: pd.DataFrame):
     title = "Associations between Demographics and AI Beliefs"
     plt.title(title)
     plt.tight_layout()
-    plt.savefig(f"plots/{title.replace(' ', '_').lower()}.png")
+    plt.savefig(f"plots/friends/{title.replace(' ', '_').lower()}.png")
     print(f"Saved plot for {title}")
     # plt.show()
 

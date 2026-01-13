@@ -17,8 +17,11 @@ import math
 MIN_DURATION = 0 * 60 
 MAX_DURATION = 30 * 60
 
-ATTENTION_CHECK_COLUMN = "q21"
-ATTENTION_CHECK_CORRECT = "Agree"
+ATTENTION_CHECK_1_COLUMN = "q21"
+ATTENTION_CHECK_1_CORRECT = "Agree"
+
+ATTENTION_CHECK_2_COLUMN = "q38"
+ATTENTION_CHECK_2_CORRECT = "Apple"
 
 CONSENT_CHECK_COLUMN = "q40"
 CONSENT_CHECK_CORRECT = "Yes"
@@ -49,14 +52,20 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     print(f"Unfinished responses: {remaining_responses - finished_responses}")
     remaining_responses = finished_responses
     
-    if ATTENTION_CHECK_COLUMN in df_clean.columns.to_list():
-        df_clean = df_clean[df_clean[ATTENTION_CHECK_COLUMN] == ATTENTION_CHECK_CORRECT]
-        attention_checked_responses = len(df_clean)
-        print(f"Amount that failed attention check: {remaining_responses - attention_checked_responses}")
-        remaining_responses = attention_checked_responses
+    if ATTENTION_CHECK_1_COLUMN in df_clean.columns.to_list():
+        df_clean = df_clean[df_clean[ATTENTION_CHECK_1_COLUMN] == ATTENTION_CHECK_1_CORRECT]
+        attention_checked_1_responses = len(df_clean)
+        print(f"Amount that failed attention check 1: {remaining_responses - attention_checked_1_responses}")
+        remaining_responses = attention_checked_1_responses
+
+    if ATTENTION_CHECK_2_COLUMN in df_clean.columns.to_list():
+        df_clean = df_clean[df_clean[ATTENTION_CHECK_2_COLUMN] == ATTENTION_CHECK_2_CORRECT]
+        attention_checked_2_responses = len(df_clean)
+        print(f"Amount that failed attention check 2: {remaining_responses - attention_checked_2_responses}")
+        remaining_responses = attention_checked_2_responses
     
     if CONSENT_CHECK_COLUMN in df_clean.columns.to_list():
-        df_clean = df_clean[df_clean[CONSENT_CHECK_COLUMN] == CONSENT_CHECK_CORRECT]
+        df_clean = df_clean[df_clean[CONSENT_CHECK_COLUMN].str.startswith(CONSENT_CHECK_CORRECT)]
         consent_checked_responses = len(df_clean)
         print(f"Amount that failed consent check: {remaining_responses - consent_checked_responses}")
         remaining_responses = consent_checked_responses
@@ -152,7 +161,7 @@ def create_bar_plot_screen(
 
     plt.suptitle(title)
     plt.tight_layout()
-    plt.savefig(f"plots/{title.replace(' ', '_').lower()}.png")
+    plt.savefig(f"plots/full/{title.replace(' ', '_').lower()}.png")
     print(f"Saved plot for {title}")
     # plt.show()
 
@@ -173,11 +182,10 @@ def process_open_questions(df: pd.DataFrame, column: str) -> pd.Series:
     # df["ai_flag"] = df[f"{column}_ai_score"] > df[f"{column}_ai_score"].quantile(0.95)
     df[f"{column}_clean"] = df[column].fillna("Empty").apply(preprocess_open_text)
 
-
     categorize_open_ended_responses(df, f"{column}_clean")
 
     print(f"Sample categorizations for {column}:")
-    max_width = 30  
+    max_width = 50  
     for o, c, l, s in zip(
         df[column], 
         df[f"{column}_clean"], 
@@ -261,7 +269,7 @@ def repetition_ratio(text: str) -> float:
     return max(counts.values()) / len(tokens)
 
 
-filename = "export_full_1.csv"
+filename = "export_full_2.csv"
 force_data_cleaning = False
 output_path = Path(f"cleaned_data/{filename}")
 if output_path.exists() and not force_data_cleaning:
@@ -297,16 +305,7 @@ GENERAL_AI_OPEN_QUESTIONS = {
     "q17": "No mistake explanation",
 }
 
-GENERAL_AI_MC_QUESTIONS = {
-    "q10": "Control over AI",
-    "q11": "Harmfulness of AI",
-    "q12": "Types of harm",
-    "q13": "Can AI become conscious",
-    "q14": "Type of consciousness",
-    "q15": "Does AI make mistakes",
-    "q18": "Frequency of mistakes",
-    "q19": "Importance of AI detection",
-    "q20": "Can you detect AI-generated content",
+MAILS_QUESTIONS = {
     "q22_1": "Difference between AI and logic",
     "q22_2": "Create AI yourself",
     "q23_1": "Keep up-to-date with AI",
@@ -317,15 +316,33 @@ GENERAL_AI_MC_QUESTIONS = {
     "q25_2": "Difficulty of tasks",
     "q26_1": "Prevent AI from influencing you",
     "q26_2": "Access pros and cons of AI",
+}
+df_clean["mails_mean"] = (
+    df_clean[list(MAILS_QUESTIONS.keys())]
+    .apply(pd.to_numeric, errors="coerce")
+    .mean(axis=1)
+    .round(0)
+)
+
+GENERAL_AI_MC_QUESTIONS = {
+    "q10": "Control over AI",
+    "q11": "Harmfulness of AI",
+    "q12": "Types of harm",
+    "q13": "Can AI become conscious",
+    "q14": "Type of consciousness",
+    "q15": "Does AI make mistakes",
+    "q18": "Frequency of mistakes",
+    "q19": "Importance of AI detection",
+    "q20": "Can you detect AI-generated content",
     "q27_1": "Familiarity with ChatGPT",
     "q27_2": "Familiarity with DALLE",
     "q27_3": "Familiarity with Sora",
-}
+} | { "mails_mean": "MAILS Score"}
 create_bar_plot_screen(
     df_clean,
     GENERAL_AI_MC_QUESTIONS,
     title="Opinions about General AI",
-    bin_numeric_list=("q18",)
+    bin_numeric_list=("q27",),
 )
 
 CHATGPT_OPEN_QUESTIONS = {
@@ -338,15 +355,15 @@ CHATGPT_OPEN_QUESTIONS = {
 CHATGPT_MC_QUESTIONS = {
     "q30": "How often use ChatGPT",
     "q31": "Learns from interactions",
-    "q26_1": "Reuses information",
-    "q26_2": "Can combine in new ways",
-    "q26_3": "Can access information from the web",
-    "q26_4": "Stores personal data",
-    "q26_5": "Changes based on user",
-    "q26_6": "Just follows rules",
-    "q26_7": "Is influenced by the culture of the user",
-    "q26_8": "Could produce harmful information",
-    "q27_1": "Double check ChatGPT info",
+    "q36_1": "Reuses information",
+    "q36_2": "Can combine in new ways",
+    "q36_3": "Can access information from the web",
+    "q36_4": "Stores personal data",
+    "q36_5": "Changes based on user",
+    "q36_6": "Just follows rules",
+    "q36_7": "Is influenced by the culture of the user",
+    "q36_8": "Could produce harmful information",
+    "q37": "Double check ChatGPT info",
 }
 create_bar_plot_screen(
     df_clean,
@@ -355,17 +372,17 @@ create_bar_plot_screen(
 )
 
 DALLE_OPEN_QUESTIONS = {
-    "q31": "How does DALLE work",
+    "q41": "How does DALLE work",
 }
 
 DALLE_MC_QUESTIONS = {
-    "q32_1": "Reuses information",
-    "q32_2": "Can combine in new ways",
-    "q32_3": "Can recreate artists' styles",
-    "q32_4": "Uses content without permission",
-    "q32_5": "Is a tool and not an creator",
-    "q32_6": "Stores copies of generated images",
-    "q32_7": "Creates culturally biased images",
+    "q42_1": "Reuses information",
+    "q42_2": "Can combine in new ways",
+    "q42_3": "Can recreate artists' styles",
+    "q42_4": "Uses content without permission",
+    "q42_5": "Is a tool and not an creator",
+    "q42_6": "Stores copies of generated images",
+    "q42_7": "Creates culturally biased images",
 }
 create_bar_plot_screen(
     df_clean,
@@ -374,11 +391,11 @@ create_bar_plot_screen(
 )
 
 SORA_MC_QUESTIONS = {
-    "q41_1": "Creates videos close to reality",
-    "q41_2": "Mainly reuses content",
-    "q41_3": "Makes faking videos easy",
-    "q41_4": "Uses content without permission",
-    "q41_5": "Will make it harder to trust videos",
+    "q51_1": "Creates videos close to reality",
+    "q51_2": "Mainly reuses content",
+    "q51_3": "Makes faking videos easy",
+    "q51_4": "Uses content without permission",
+    "q51_5": "Will make it harder to trust videos",
 }
 create_bar_plot_screen(
     df_clean,
@@ -386,27 +403,7 @@ create_bar_plot_screen(
     title="Opinions about Sora",
 )
 
-FEEDBACK_OPEN_QUESTIONS = {
-    "q55": "Any suggestions for improvement",
-}
-
-FEEDBACK_MC_QUESTIONS = {
-    "q51": "Any confusing questions",
-    "q52_1": "Most understandable question",
-    "q52_4": "Least understandable question",
-    "q53": "How long did the survey feel",
-    "q54_1": "How intuitive was the survey",
-    "q54_2": "How easy was the navigation",
-    "q54_3": "How interesting were the questions",
-}
-create_bar_plot_screen(
-    df_clean,
-    FEEDBACK_MC_QUESTIONS,
-    title="Survey Feedback",
-    bin_numeric_list=("q54",),
-)
-
-OPEN_QUESTIONS = GENERAL_AI_OPEN_QUESTIONS | CHATGPT_OPEN_QUESTIONS | DALLE_OPEN_QUESTIONS | FEEDBACK_OPEN_QUESTIONS
+OPEN_QUESTIONS = GENERAL_AI_OPEN_QUESTIONS | CHATGPT_OPEN_QUESTIONS | DALLE_OPEN_QUESTIONS
 
 for col, label in OPEN_QUESTIONS.items():
     process_open_questions(df_clean, col)
@@ -418,6 +415,21 @@ create_bar_plot_screen(
     OPEN_QUESTIONS_LABELED,
     title=f"Categorized responses for open questions",
 )
+
+AI_SCORE_COLS = [
+    col for col in df_clean.columns
+    if col.endswith("_ai_score")
+]
+df_clean["ai_score_mean"] = (
+    df_clean[AI_SCORE_COLS]
+    .mean(axis=1)
+    .round(3)
+)
+df_clean["ai_score_mean_z"] = (
+    df_clean["ai_score_mean"] - df_clean["ai_score_mean"].mean()
+) / df_clean["ai_score_mean"].std()
+print(df_clean[["ai_score_mean", "ai_score_mean_z"]])
+
 
 
 def cramers_v(chi2, contingency_table):
@@ -500,7 +512,7 @@ def create_heatmap_of_associations(df: pd.DataFrame):
     title = "Associations between Demographics and AI Beliefs"
     plt.title(title)
     plt.tight_layout()
-    plt.savefig(f"plots/{title.replace(' ', '_').lower()}.png")
+    plt.savefig(f"plots/full/{title.replace(' ', '_').lower()}.png")
     print(f"Saved plot for {title}")
     # plt.show()
 
