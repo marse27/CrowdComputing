@@ -76,13 +76,13 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
         print(f"Duplicate responses removed: {remaining_responses - deduplicated_responses}")
         remaining_responses = deduplicated_responses
     
-    duration = df_clean[DURATION_COL].astype(int)
-    df_clean = df_clean[
-        (duration >= MIN_DURATION) &
-        (duration <= MAX_DURATION)
-    ]
-    duration_filtered_responses = len(df_clean)
-    print(f"Responses filtered by duration: {remaining_responses - duration_filtered_responses}")
+    # duration = df_clean[DURATION_COL].astype(int)
+    # df_clean = df_clean[
+    #     (duration >= MIN_DURATION) &
+    #     (duration <= MAX_DURATION)
+    # ]
+    # duration_filtered_responses = len(df_clean)
+    # print(f"Responses filtered by duration: {remaining_responses - duration_filtered_responses}")
 
     return df_clean
 
@@ -270,7 +270,7 @@ def repetition_ratio(text: str) -> float:
 
 
 filename = "export_full_2.csv"
-force_data_cleaning = False
+force_data_cleaning = True
 output_path = Path(f"cleaned_data/{filename}")
 if output_path.exists() and not force_data_cleaning:
 	print(f"Cleaned data already exists at {output_path}, skipping cleaning step.")
@@ -342,7 +342,6 @@ create_bar_plot_screen(
     df_clean,
     GENERAL_AI_MC_QUESTIONS,
     title="Opinions about General AI",
-    bin_numeric_list=("q27",),
 )
 
 CHATGPT_OPEN_QUESTIONS = {
