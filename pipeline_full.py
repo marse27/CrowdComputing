@@ -97,8 +97,8 @@ def clean_multiple_choice_text(series: pd.Series) -> pd.Series:
     )
 
 def bin_1_to_100(series: pd.Series):
-    bins = list(range(0, 101, 20))
-    labels = [f"{i+1}-{i+20}" for i in range(0, 100, 20)]
+    bins = list(range(0, 101, 5))
+    labels = [f"{i+1}-{i+5}" for i in range(0, 100, 5)]
     return pd.cut(
         series, 
         bins=bins, 
@@ -125,6 +125,7 @@ def plot_multiple_choice_distribution(
     counts = data.value_counts()
     counts = counts[counts >= min_count]
 
+    counts = counts.sort_index()
     counts.plot(kind="bar", ax=ax)
     ax.set_title(title)
     ax.set_xlabel("")
@@ -294,10 +295,12 @@ DEMOGRAPHIC_QUESTIONS = {
 }
 mask = (df_clean["q7"] == "Other:") & (df_clean["q7_8_text"].notna())
 df_clean.loc[mask, "q7"] = df_clean.loc[mask, "q7_8_text"]
+df_clean["q1"] = 2025 - df_clean["q1"]
 create_bar_plot_screen(
     df_clean,
     DEMOGRAPHIC_QUESTIONS,
     title="Demographic Information",
+    bin_numeric_list=("q1",)
 )
 
 GENERAL_AI_OPEN_QUESTIONS = {
