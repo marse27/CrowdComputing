@@ -208,7 +208,7 @@ def preprocess_open_text(text: str):
     # text = emoji.replace_emoji(text, replace="") # Remove emojis
     
     words = re.findall(r'\b\w+\b', text) # Tokenization using regex
-    words = [w for w in words if len(w) > 3]  # Remove short words
+    words = [w for w in words if len(w) > 4]  # Remove short words
     
     return " ".join(words)
 
